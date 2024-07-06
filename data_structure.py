@@ -2,10 +2,14 @@ from collections import namedtuple, defaultdict
 import networkx as nx
 import matplotlib.pyplot as plt
 #id:unique_id,用于唯一标识节点，在需要共同计算两种节点时使用。en的sn字段为其连接到哪个sn上
+#节点标识号，servernode标识号，内存，cpu，微服务部署列表
 ServerNode = namedtuple('ServerNode', ['id','SN_id','memory', 'cpu','ms_list'])
+#两侧节点，该路径带宽
 Edge = namedtuple('Edge', ['nodes','bandwidth'])
-Microservice = namedtuple('Microservice', ['MS_id','memory_usage', 'throughput'])
-EdgeNode = namedtuple('EdgeNode', ['id','EN_id','SN_unique_id','memory', 'cpu','bandwith','ms_list'])
+#微服务id，内存占用，吞吐量（传输需求），运算量（计算需求），部署节点编号
+Microservice = namedtuple('Microservice', ['MS_id','memory_usage', 'throughput','calculation','deploy_list'])
+#节点标识号，edgenode标识号，唯一连接servernode标识号，内存，cpu，连接带宽，微服务部署列表，请求第下标i个微服务时去哪个节点
+EdgeNode = namedtuple('EdgeNode', ['id','EN_id','SN_unique_id','memory', 'cpu', 'bandwidth' ,'ms_list','coresponding_ms'])
 
 
 class Graph:
@@ -25,7 +29,7 @@ class Graph:
         self.edges[node2][node1] = edge
     def add_edgenode(self,node):
         self.edgenodes.append(node)
-        self.add_edge(node.id, node.SN_unique_id,Edge(nodes=[node.id, node.SN_unique_id], bandwidth=node.bandwith))
+        self.add_edge(node.id, node.SN_unique_id,Edge(nodes=[node.id, node.SN_unique_id], bandwidth=node.bandwidth))
 
 
     def deploy_microservice(self, node_id, microservice):
@@ -34,7 +38,14 @@ class Graph:
 
     def caching_exchange_microservice(self, node_id, microservice):
         return
-
+    def init_deployment_info(self,microservices):
+        for node in self.edgenodes:
+            node.ms_list = []
+            node.coresponding_ms = [0,0,0,0,0]
+        for node in self.servernodes:
+            node.ms_list = []
+        for ms in microservices:
+            ms.deploy_list=[]
     def draw_graph(self):
         # 创建NetworkX图
         nx_graph = nx.Graph()

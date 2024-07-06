@@ -1,10 +1,11 @@
 import random
+
+import networkx as nx
+import numpy as np
 import torch
 import torch.optim as optim
-import numpy as np
 from torch import nn
 
-from data_structure import Graph, ServerNode, Microservice
 from q_network import QNetwork
 from replay_buffer import ReplayBuffer
 
@@ -19,12 +20,24 @@ EPSILON_END = 0.01
 EPSILON_DECAY = 500
 
 
-def train_dqn(graph, microservices):
-    # 每个节点的内存和CPU + 边的带宽 + 目标微服务的内存使用量和吞吐量
-    state_dim = len(graph.servernodes) * 2 + len(graph.edgenodes) * 2 + len(graph.edges) + 2
-    # 在哪个节点部署微服务
-    action_dim = len(graph.servernodes)+len(graph.edgenodes)
+def train_dqn(graph, microservices, nx_graph):
+    shortest_paths = compute_all_pairs_shortest_path(nx_graph)
 
+    # 每个节点的内存和CPU和五种微服务的部署情况 + 边的带宽 + 目标微服务的内存使用量和吞吐量+请求微服务的edgenode id编号
+    attribute_num = 2 + len(microservices)
+    edge_num = 0
+    for node1_id in graph.edges:
+        for node2_id, edge in graph.edges[node1_id].items():
+            edge_num+=1
+    edge_num = int(edge_num / 2)
+    state_dim = len(graph.servernodes) * attribute_num + len(graph.edgenodes) * attribute_num + edge_num + 4 + 1
+    # 在哪个节点部署微服务
+    action_dim = len(graph.servernodes) + len(graph.edgenodes)
+    servernode_cursor = 0
+    edgenode_cursor = len(graph.servernodes) * (2 + len(microservices))
+    edge_cursor = edgenode_cursor + len(graph.edgenodes) * (2 + len(microservices))
+    request_cursor = edge_cursor + edge_num
+    cursor = [servernode_cursor, edgenode_cursor, edge_cursor, request_cursor]
     # 初始化 Q 网络和目标 Q 网络
     q_network = QNetwork(state_dim, action_dim)
     target_q_network = QNetwork(state_dim, action_dim)
@@ -58,6 +71,7 @@ def train_dqn(graph, microservices):
         steps_done += 1
 
         return action
+
     # 定义计算 TD 误差的函数
     def compute_td_loss(batch_size):
         # 从经验回放缓冲区中采样
@@ -94,17 +108,23 @@ def train_dqn(graph, microservices):
 
     # 开始训练
     for episode in range(num_episodes):
+
+        print("episode:"+str(episode+1))
         # 重置状态,将图重置为0
         state = reset_state(graph, microservices)
+        # 同时初始化图中信息
+        graph.init_deployment_info(microservices)
         episode_reward = 0
         done = False
-
+        iter=0
         while not done:
+            iter+=1
+            print(iter)
             # 选择动作
             action = select_action(state)
 
             # 执行动作，得到下一个状态、奖励和是否终止
-            next_state, reward, done = step(graph, microservices, state, action)
+            next_state, reward, done = step(graph, microservices, state, action, cursor)
 
             # 将经验存储到回放缓冲区中
             replay_buffer.push(state, action, reward, next_state, done)
@@ -127,31 +147,90 @@ def train_dqn(graph, microservices):
 
 def reset_state(graph, microservices):
     state = []
+    # 6*7
     for node in graph.servernodes:
         state.append(node.memory)
         state.append(node.cpu)
+        state.extend([0] * len(microservices))
+    # 10*7
     for node in graph.edgenodes:
         state.append(node.memory)
         state.append(node.cpu)
-    for edge in graph.edges:
-        state.append(edge.bandwidth)
+        state.extend([0] * len(microservices))
+    # 19*1
+    for node1_id in graph.edges:
+        for node2_id, edge in graph.edges[node1_id].items():
+            if node1_id<node2_id:
+                state.append(edge.bandwidth)
     microservice = random.choice(microservices)
+    # 1*4
+    state.append(microservice.MS_id)
     state.append(microservice.memory_usage)
     state.append(microservice.throughput)
+    state.append(microservice.calculation)
+    # 1*1
+    state.append(random.choice(graph.edgenodes).id)
+
+
     return np.array(state)
 
 
-def step(graph, microservices, state, action):
-    # 根据state和action计算reward和next_state
-    # 示例中假设next_state和reward为随机值，done为False
+def step(graph, microservices, state, action, cursor):
     next_state = state.copy()
     reward = calculate_reward(state, action)
+
     done = False
+
+    # cursor=[servernode_cursor,edgenode_cursor,edge_cursor,request_cursor]
+    if next_state[action * 7 + 2 + next_state[cursor[3] + 0]] == 0:
+        next_state[action * 7 + 2 + next_state[cursor[3] + 0]] = 1
+    microservice = random.choice(microservices)
+    next_state[cursor[3] + 0] = microservice.MS_id
+    next_state[cursor[3] + 1] = microservice.memory_usage
+    next_state[cursor[3] + 2] = microservice.calculation
+    next_state[cursor[3] + 3] = random.choice(graph.edgenodes).id
+
+
+
     return next_state, reward, done
 
+
 def get_next_request():
-    #这个函数中设定下一个请求出现的概率
+    # 这个函数中设定下一个请求出现的概率
     return
+
+
 def calculate_reward(state, action):
     # 计算reward的逻辑
     return random.random()
+
+
+def compute_all_pairs_shortest_path(nx_graph):
+    n = len(nx_graph.nodes())
+    map = [[{'length': None, 'path': None} for _ in range(n + 1)] for _ in range(n + 1)]
+    # 使用 Floyd-Warshall 算法计算全源最短路径
+    path_lengths, paths = nx.floyd_warshall_predecessor_and_distance(nx_graph)
+
+    # 打印结果
+    for source in paths:
+        for target in paths[source]:
+            if source != target:  # 排除自环
+                path = []
+                current = target
+                length = 0
+                while current != source:
+                    if path:
+                        data = nx_graph.get_edge_data(path[-1], current)
+                        length += data['weight']
+                    path.append(current)
+                    current = path_lengths[source][current]
+                data = nx_graph.get_edge_data(path[-1], current)
+                length += data['weight']
+                path.append(source)
+                path.reverse()
+                # print(f"Shortest path from {source} to {target} is {path} with length {length}")
+                map[source][target] = {'length': length, 'path': path}
+            else:
+                map[source][target] = {'length': 0, 'path': [source]}
+
+    return map
