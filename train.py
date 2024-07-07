@@ -148,12 +148,12 @@ def train_dqn(graph, microservices, nx_graph):
 def reset_state(graph, microservices):
     state = []
     # 6*7
-    for node in graph.servernodes:
+    for node in graph.servernodes.values():
         state.append(node.memory)
         state.append(node.cpu)
         state.extend([0] * len(microservices))
     # 10*7
-    for node in graph.edgenodes:
+    for node in graph.edgenodes.values():
         state.append(node.memory)
         state.append(node.cpu)
         state.extend([0] * len(microservices))
@@ -162,14 +162,14 @@ def reset_state(graph, microservices):
         for node2_id, edge in graph.edges[node1_id].items():
             if node1_id<node2_id:
                 state.append(edge.bandwidth)
-    microservice = random.choice(microservices)
+    key,microservice = random.choice(list(microservices.items()))
     # 1*4
     state.append(microservice.MS_id)
     state.append(microservice.memory_usage)
     state.append(microservice.throughput)
     state.append(microservice.calculation)
     # 1*1
-    state.append(random.choice(graph.edgenodes).id)
+    state.append(random.choice(list(graph.edgenodes.keys())))
 
 
     return np.array(state)
@@ -177,14 +177,16 @@ def reset_state(graph, microservices):
 
 def step(graph, microservices, state, action, cursor):
     next_state = state.copy()
+
+    #计算reward
     reward = calculate_reward(state, action)
 
     done = False
-
+    #转移到下一个状态
     # cursor=[servernode_cursor,edgenode_cursor,edge_cursor,request_cursor]
     if next_state[action * 7 + 2 + next_state[cursor[3] + 0]] == 0:
         next_state[action * 7 + 2 + next_state[cursor[3] + 0]] = 1
-    microservice = random.choice(microservices)
+    microservice = random.choice(list(microservices.values()))
     next_state[cursor[3] + 0] = microservice.MS_id
     next_state[cursor[3] + 1] = microservice.memory_usage
     next_state[cursor[3] + 2] = microservice.calculation

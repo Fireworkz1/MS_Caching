@@ -1,25 +1,52 @@
 from collections import namedtuple, defaultdict
 import networkx as nx
 import matplotlib.pyplot as plt
+from dataclasses import dataclass, field
+from typing import List, Tuple
 #id:unique_id,用于唯一标识节点，在需要共同计算两种节点时使用。en的sn字段为其连接到哪个sn上
-#节点标识号，servernode标识号，内存，cpu，微服务部署列表
-ServerNode = namedtuple('ServerNode', ['id','SN_id','memory', 'cpu','ms_list'])
-#两侧节点，该路径带宽
-Edge = namedtuple('Edge', ['nodes','bandwidth'])
-#微服务id，内存占用，吞吐量（传输需求），运算量（计算需求），部署节点编号
-Microservice = namedtuple('Microservice', ['MS_id','memory_usage', 'throughput','calculation','deploy_list'])
-#节点标识号，edgenode标识号，唯一连接servernode标识号，内存，cpu，连接带宽，微服务部署列表，请求第下标i个微服务时去哪个节点
-EdgeNode = namedtuple('EdgeNode', ['id','EN_id','SN_unique_id','memory', 'cpu', 'bandwidth' ,'ms_list','coresponding_ms'])
+@dataclass
+class ServerNode:
+    # 节点标识号，servernode标识号，内存，cpu，微服务部署列表
+    id: int
+    SN_id: int
+    memory: int
+    cpu: int
+    ms_list: List
 
+@dataclass
+class Edge:
+    # 两侧节点，该路径带宽
+    nodes: Tuple[int, int]
+    bandwidth: int
 
+@dataclass
+class Microservice:
+    # 微服务id，内存占用，吞吐量（传输需求），运算量（计算需求），部署节点编号
+    MS_id: int
+    memory_usage: int
+    throughput: int
+    calculation: int
+    deploy_list: List[int]
+
+@dataclass
+class EdgeNode:
+    # 节点标识号，edgenode标识号，唯一连接servernode标识号，内存，cpu，连接带宽，微服务部署列表，请求第下标i个微服务时去哪个节点
+    id: int
+    EN_id: int
+    SN_unique_id: int
+    memory: int
+    cpu: int
+    bandwidth: int
+    ms_list: List[int]
+    coresponding_ms: List[int]
 class Graph:
     def  __init__(self):
-        self.servernodes = []
-        self.edgenodes = []
+        self.servernodes = defaultdict(dict)
+        self.edgenodes = defaultdict(dict)
         self.edges = defaultdict(dict)
         self.microservices_deployment=defaultdict(list)
     def add_servernode(self, node):
-        self.servernodes.append(node)
+        self.servernodes.update({node.id:node})
     def add_edge(self, node1, node2, edge):
         if node1 not in self.edges:
             self.edges[node1] = {}
@@ -28,8 +55,8 @@ class Graph:
         self.edges[node1][node2] = edge
         self.edges[node2][node1] = edge
     def add_edgenode(self,node):
-        self.edgenodes.append(node)
-        self.add_edge(node.id, node.SN_unique_id,Edge(nodes=[node.id, node.SN_unique_id], bandwidth=node.bandwidth))
+        self.edgenodes.update({node.id:node})
+        self.add_edge(node.id, node.SN_unique_id,Edge(nodes=(node.id, node.SN_unique_id), bandwidth=node.bandwidth))
 
 
     def deploy_microservice(self, node_id, microservice):
@@ -39,19 +66,19 @@ class Graph:
     def caching_exchange_microservice(self, node_id, microservice):
         return
     def init_deployment_info(self,microservices):
-        for node in self.edgenodes:
+        for node in self.edgenodes.values():
             node.ms_list = []
             node.coresponding_ms = [0,0,0,0,0]
-        for node in self.servernodes:
+        for node in self.servernodes.values():
             node.ms_list = []
-        for ms in microservices:
+        for ms in microservices.values():
             ms.deploy_list=[]
     def draw_graph(self):
         # 创建NetworkX图
         nx_graph = nx.Graph()
-        for node in self.servernodes:
+        for node in self.servernodes.values():
             nx_graph.add_node(node.id, type="servernode", memory=node.memory, cpu=node.cpu)
-        for node in self.edgenodes:
+        for node in self.edgenodes.values():
             nx_graph.add_node(node.id, type="edgenode", memory=node.memory, cpu=node.cpu)
         for node1 in self.edges:
             for node2 in self.edges[node1]:
@@ -60,7 +87,7 @@ class Graph:
 
         # 创建标签
         node_labels = {}
-        for node in self.servernodes:
+        for node in self.servernodes.values():
             microservices = self.microservices_deployment[node.id]
             ms_info = '\n'.join(
                 [f'MS{ms.MS_id}(M:{ms.memory_usage}, T:{ms.throughput})' for ms in enumerate(microservices)])
@@ -68,7 +95,7 @@ class Graph:
                 ms_info = []
             node_labels[node.id] = f'SN {node.SN_id}\nMemory: {node.memory}\nCPU: {node.cpu}\n{ms_info}'
 
-            for node in self.edgenodes:
+            for node in self.edgenodes.values():
                 microservices = self.microservices_deployment[node.id]
                 ms_info = '\n'.join(
                     [f'MS{ms.MS_id}(M:{ms.memory_usage}, T:{ms.throughput})' for ms in enumerate(microservices)])

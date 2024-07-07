@@ -7,11 +7,11 @@ def map_to_networkx_graph(custom_graph):
     G = nx.Graph()
 
     # 添加服务器节点
-    for node in custom_graph.servernodes:
+    for node in custom_graph.servernodes.values():
         G.add_node(node.id, memory=node.memory, cpu=node.cpu, type='server')
 
     # 添加边缘节点
-    for node in custom_graph.edgenodes:
+    for node in custom_graph.edgenodes.values():
         G.add_node(node.id, memory=node.memory, cpu=node.cpu, type='edge')
 
     # 添加边
@@ -31,15 +31,15 @@ def initiating():
     graph.add_servernode(ServerNode(id=6,SN_id=6, memory=64, cpu=12, ms_list=[]))
 
     #初始化服务器节点间连接情况
-    graph.add_edge(1, 2, Edge(nodes=[1, 2], bandwidth=100))
-    graph.add_edge(1, 3, Edge(nodes=[1, 3], bandwidth=200))
-    graph.add_edge(1, 4, Edge(nodes=[1, 4], bandwidth=200))
-    graph.add_edge(1, 6, Edge(nodes=[1, 6], bandwidth=300))
-    graph.add_edge(2, 3, Edge(nodes=[2, 3], bandwidth=300))
-    graph.add_edge(2, 5, Edge(nodes=[2, 5], bandwidth=200))
-    graph.add_edge(3, 6, Edge(nodes=[3, 6], bandwidth=100))
-    graph.add_edge(3, 5, Edge(nodes=[3, 5], bandwidth=100))
-    graph.add_edge(4, 6, Edge(nodes=[4, 6], bandwidth=300))
+    graph.add_edge(1, 2, Edge(nodes=(1, 2), bandwidth=100))
+    graph.add_edge(1, 3, Edge(nodes=(1, 3), bandwidth=200))
+    graph.add_edge(1, 4, Edge(nodes=(1, 4), bandwidth=200))
+    graph.add_edge(1, 6, Edge(nodes=(1, 6), bandwidth=300))
+    graph.add_edge(2, 3, Edge(nodes=(2, 3), bandwidth=300))
+    graph.add_edge(2, 5, Edge(nodes=(2, 5), bandwidth=200))
+    graph.add_edge(3, 6, Edge(nodes=(3, 6), bandwidth=100))
+    graph.add_edge(3, 5, Edge(nodes=(3, 5), bandwidth=100))
+    graph.add_edge(4, 6, Edge(nodes=(4, 6), bandwidth=300))
 
 
     #初始化边缘节点
@@ -55,13 +55,14 @@ def initiating():
     graph.add_edgenode(EdgeNode(id=16, EN_id=10, SN_unique_id=6, memory=4, cpu=2,bandwidth=50, ms_list=[],coresponding_ms = [0,0,0,0,0]))
 
     #初始化微服务属性
-    microservices = [
-        Microservice(MS_id=1, memory_usage=8, throughput=20,calculation=2,deploy_list=[]),
-        Microservice(MS_id=2, memory_usage=16, throughput=10,calculation=4,deploy_list=[]),
-        Microservice(MS_id=3, memory_usage=16, throughput=40,calculation=2,deploy_list=[]),
-        Microservice(MS_id=4, memory_usage=8, throughput=40,calculation=1,deploy_list=[]),
-        Microservice(MS_id=5, memory_usage=4, throughput=80,calculation=2,deploy_list=[]),
-    ]
+    microservices = dict([(1,Microservice(MS_id=1, memory_usage=8, throughput=20,calculation=2,deploy_list=[])),
+                            (2,Microservice(MS_id=2, memory_usage=16, throughput=10,calculation=4,deploy_list=[])),
+                             (3,Microservice(MS_id=3, memory_usage=16, throughput=40,calculation=2,deploy_list=[])),
+                             (4,Microservice(MS_id=4, memory_usage=8, throughput=40,calculation=1,deploy_list=[])),
+                             (5,Microservice(MS_id=5, memory_usage=4, throughput=80,calculation=2,deploy_list=[]))])
+
+
+
     nx_graph=map_to_networkx_graph(graph)
     return nx_graph,graph,microservices
 
