@@ -63,8 +63,9 @@ class Graph:
         self.microservices_deployment[node_id].append(microservice)
         print("deploy MS {} in Node {}",microservice.MS_id,node_id)
 
-    def caching_exchange_microservice(self, node_id, microservice):
-        return
+    def caching_exchange_microservice(self, node_id, ms_list,microservices,target_msid):
+        # TODO:添加对应逻辑
+        return [0,0,0,0,0],0
     def init_deployment_info(self,microservices):
         for node in self.edgenodes.values():
             node.ms_list = []

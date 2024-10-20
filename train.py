@@ -28,7 +28,7 @@ def train_dqn(graph, microservices, nx_graph):
     edge_num = 0
     for node1_id in graph.edges:
         for node2_id, edge in graph.edges[node1_id].items():
-            edge_num+=1
+            edge_num += 1
     edge_num = int(edge_num / 2)
     state_dim = len(graph.servernodes) * attribute_num + len(graph.edgenodes) * attribute_num + edge_num + 4 + 1
     # 在哪个节点部署微服务
@@ -109,16 +109,16 @@ def train_dqn(graph, microservices, nx_graph):
     # 开始训练
     for episode in range(num_episodes):
 
-        print("episode:"+str(episode+1))
+        print("episode:" + str(episode + 1))
         # 重置状态,将图重置为0
         state = reset_state(graph, microservices)
         # 同时初始化图中信息
         graph.init_deployment_info(microservices)
         episode_reward = 0
         done = False
-        iter=0
+        iter = 0
         while not done:
-            iter+=1
+            iter += 1
             print(iter)
             # 选择动作
             action = select_action(state)
@@ -160,9 +160,9 @@ def reset_state(graph, microservices):
     # 19*1
     for node1_id in graph.edges:
         for node2_id, edge in graph.edges[node1_id].items():
-            if node1_id<node2_id:
+            if node1_id < node2_id:
                 state.append(edge.bandwidth)
-    key,microservice = random.choice(list(microservices.items()))
+    key, microservice = random.choice(list(microservices.items()))
     # 1*4
     state.append(microservice.MS_id)
     state.append(microservice.memory_usage)
@@ -171,28 +171,74 @@ def reset_state(graph, microservices):
     # 1*1
     state.append(random.choice(list(graph.edgenodes.keys())))
 
-
     return np.array(state)
 
 
 def step(graph, microservices, state, action, cursor):
     next_state = state.copy()
+    msid = state[cursor[3] + 0]
+    microservice = microservices[msid]
+    if action < 6:
+        # 部署在servernode
+        node = graph.servernodes[action]
+    else:
+        # 部署在edgenode
+        node = graph.edgenodes[action]
+    # flag用来判断当前部署位置是否已经部署了该微服务。如果是，则不部署不替换，flag为1；如果不是则flag为0
+    # flag=0.无需缓存替换，正常部署
+    # flag=1,无需部署
+    # flag=2,缓存替换
+    # flag=3.选定的部署位置无法部署微服务（总缓存小于微服务需要缓存）
 
-    #计算reward
+    if msid in node.ms_list:
+        # 当微服务不需要部署时
+        flag = 1
+    else:
+        # 当微服务要部署时需要进行的逻辑判断
+        # 如果内存剩余空间足，无需缓存替换
+        if state[action * 7 + 0] > microservice.memory_usage:
+            flag = 0
+            node.ms_list.append(microservice.MS_id)
+            graph.edgenodes[cursor[3] + 3].coresponding_ms[msid - 1] = action
+            microservice.deploy_list.append(action)
+        elif node.memory < microservice.memory_usage:
+            flag = 3
+            # TODO:添加对应逻辑
+        else:
+            flag = 2
+            ms_list = [0, 0, 0, 0, 0]
+            ms_list[0:6] = state[action * 7 + 2:action * 7 + 8]
+            new_ms_list, new_memory_usage = graph.caching_exchange_microservice(node.id, ms_list, microservices,
+                                                                                microservice.MS_id)
+
+    # 计算reward
     reward = calculate_reward(state, action)
 
     done = False
-    #转移到下一个状态
+    # 转移到下一个状态
     # cursor=[servernode_cursor,edgenode_cursor,edge_cursor,request_cursor]
-    if next_state[action * 7 + 2 + next_state[cursor[3] + 0]] == 0:
+    # if next_state[action * 7 + 2 + next_state[cursor[3] + 0]] == 0:
+    # 当前请求导致的状态改变
+    if flag == 0:
         next_state[action * 7 + 2 + next_state[cursor[3] + 0]] = 1
-    microservice = random.choice(list(microservices.values()))
-    next_state[cursor[3] + 0] = microservice.MS_id
-    next_state[cursor[3] + 1] = microservice.memory_usage
-    next_state[cursor[3] + 2] = microservice.calculation
+        next_state[action * 7 + 0] -= microservice.memory_usage
+    elif flag == 1:
+        # do nothing(不部署)
+    elif flag == 2:
+        next_state[action * 7 + 2:action * 7 + 8] = new_ms_list[0:6]
+        next_state[action * 7 + 0]=new_memory_usage
+    elif flag ==3:
+        # TODO:添加对应逻辑
+    else:
+        pass
+
+    # 选取下一个请求并修改对于状态
+    # get_next_request()
+    next_microservice = random.choice(list(microservices.values()))
+    next_state[cursor[3] + 0] = next_microservice.MS_id
+    next_state[cursor[3] + 1] = next_microservice.memory_usage
+    next_state[cursor[3] + 2] = next_microservice.calculation
     next_state[cursor[3] + 3] = random.choice(graph.edgenodes).id
-
-
 
     return next_state, reward, done
 
